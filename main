@@ -1,0 +1,112 @@
+// ---- Util ----
+const float Pi = 3.14159265359;
+float remap01(float a, float b, float t) { return (t - a) / (b - a);}
+
+// ---- Ray ----
+struct Ray {
+	vec3 o;
+    vec3 d;
+    float tmin;
+    float tmax;
+};
+    
+struct Hit {
+    vec3 p;
+    vec3 n;
+    float t;
+};
+    
+Ray makeRay(in vec3 o, in vec3 d) { Ray r; r.o = o; r.d = d; r.tmin = 0.; r.tmax = 1. / 0.; return r;}
+
+// ---- Geometry ----
+struct Sphere {
+    vec3 o;
+    float r;
+};
+
+Sphere makeSphere(in vec3 o, in float r) { Sphere s; s.o = o; s.r = r; return s;}  
+    
+bool intersectSphere(Sphere s, Ray r, out Hit hit) {
+    float a = dot(r.d, r.d);
+    float b = 2. * dot(r.o - s.o, r.d);
+    float c = dot(r.o - s.o, r.o - s.o) - s.r * s.r;
+    float delta = b * b - 4. * a * c;
+    if (delta < 0.) return false;
+    float t = (-b - sqrt(delta)) / (2. * a);
+    if (t > r.tmin && t < r.tmax) {
+        hit.t = t;
+        hit.p = r.o + r.d * hit.t;
+        hit.n = normalize(hit.p - s.o);
+        return true;
+    }
+    return false;
+}
+
+bool intersectSpheres(Ray r, out vec4 col) {
+    // Sphere
+    Sphere s1 = makeSphere(vec3(-.5 * sin(iTime), .5, -5. - .5 * cos(iTime)), .8);
+    Sphere s2 = makeSphere(vec3(0., -30., -10.), 30.);
+    
+    vec3 light = vec3(5., 2., 10.);
+    Sphere s[2] = Sphere[2](s1, s2);
+    bool didHit = false;
+    for (int i = 0; i < 2; i++) {
+    	Hit hit;
+    	if (intersectSphere(s[i], r, hit)) {
+            r.tmax = hit.t;
+            float dif = .2 * dot(light, hit.n);
+        	col = vec4(.3, .4, .5, 1.) * dif;
+        	didHit = true;
+    	}
+    }
+    return didHit;
+}
+
+void shootRays(vec3 ro, vec3 rd, out vec4 col) {
+    float unit_x = 1. / iResolution.x;
+    float unit_y = 1. / iResolution.y;
+    vec2 offset[4] = vec2[4](vec2(-unit_x / 2., -unit_y / 2.), vec2(-unit_x / 2., unit_y / 2.),
+                             vec2(unit_x / 2., -unit_y / 2.), vec2(unit_x / 2., unit_y / 2.));
+    vec4 total;
+    for (int i = 0; i < 4; i++) {
+        vec2 off = offset[i];
+        Ray r = makeRay(ro - vec3(off, 0.), rd);
+        float t1;
+        vec4 scol;
+        if (intersectSpheres(r, scol)) {
+            total += scol;
+        } else {
+            total += vec4(0);
+        }
+    }
+	col = total / 4.;
+}
+
+mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
+{
+	vec3 cw = normalize(ta-ro);
+	vec3 cp = vec3(sin(cr), cos(cr),0.0);
+	vec3 cu = normalize( cross(cw,cp) );
+	vec3 cv = normalize( cross(cu,cw) );
+    return mat3( cu, cv, cw );
+}
+
+// ---- main ----
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    // Normalized pixel coordinates (from 0 to 1)
+    vec2 uv = fragCoord / iResolution.xy;
+    uv -= 0.5;
+    uv.x *= iResolution.x / iResolution.y;
+    
+    // Mouse
+    vec2 m = iMouse.xy / iResolution.xy;
+    // Ray
+    vec3 ro = vec3(0., 0., 2.);
+    vec3 rd = normalize(vec3(uv, 0.) - ro);
+    
+    // Output to screen
+    vec4 col;
+    shootRays(ro, rd, col);
+    fragColor = col;
+}
+
